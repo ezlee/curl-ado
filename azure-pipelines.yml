@@ -1,0 +1,140 @@
+# Docker
+# Build a Docker image 
+# https://docs.microsoft.com/azure/devops/pipelines/languages/docker
+
+trigger:
+  branches:
+    include:
+    #- develop    # disabling trigger for now; need to switch to schedule trigger
+    - master
+    #- releases/*
+  paths:
+    exclude:
+    - deployment/*
+    - azure-pipelines.yml
+    - README.md
+
+resources:
+- repo: self
+
+variables:
+  # Container registry service connection established during pipeline creation
+  imageName: 'curl-ado'
+  dockerRegistryServiceConnection: 'docker.io/ezlee'
+  imageRepository: 'ezlee/$(imageName)' 
+  containerRegistry: 'docker.io/ezlee'
+  dockerfilePath: 'Dockerfile'
+  tag: '$(Build.BuildId)'
+
+  # Agent VM image name - Microsoft hosted agent
+  vmImageName: 'ubuntu-latest'
+
+stages:
+- stage: Build
+  displayName: Build stage
+  jobs:  
+  - job: Build
+    displayName: Build image
+    pool:
+      vmImage: $(vmImageName)
+      workspace:
+        clean: all
+    steps:
+    - task: Bash@3
+      displayName: show workspace and other environment variables
+      inputs:
+        targetType: 'inline'
+        script: 'env | sort'
+    - task: Docker@2
+      displayName: Build and push an image to container registry
+      inputs:
+        command: buildAndPush
+        repository: $(imageRepository)
+        dockerfile: $(dockerfilePath)
+        containerRegistry: $(dockerRegistryServiceConnection)
+        tags: |
+          $(tag)
+    - task: Bash@3
+      displayName: Run Trivy Scan to scan docker images (2)
+      inputs:
+        targetType: 'inline'
+        script: |
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $HOME/Library/Caches:/root/.cache/ aquasec/trivy --exit-code 0 --severity MEDIUM,HIGH --ignore-unfixed $(containerRegistry)/$(imageName):$(tag)
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v $HOME/Library/Caches:/root/.cache/ aquasec/trivy --exit-code 1 --severity CRITICAL --ignore-unfixed $(containerRegistry)/$(imageName):$(tag)
+    - task: CmdLine@2
+      displayName: tag the new build with latest tag
+      inputs:
+        script: 'docker tag $(imageRepository):$(tag) $(imageRepository):latest'
+    - task: Docker@2
+      displayName: push the latest tag
+      inputs:
+        containerRegistry: $(dockerRegistryServiceConnection)
+        repository: $(imageRepository)
+        command: 'push'
+        tags: 'latest'
+    - task: Bash@3
+      displayName: debug - check file contents on build agent
+      inputs:
+        targetType: 'inline'
+        script: 'pwd; echo $BUILD_SOURCESDIRECTORY; echo $BUILD_ARTIFACTSTAGINGDIRECTORY; ls -al $BUILD_SOURCEDIRECTORY'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        pathtoPublish: $(build.artifactStagingDirectory)
+        artifactName: deploy_artifacts
+
+- stage: Deploy
+  displayName: Deploy stage
+  dependsOn: Build
+  jobs:  
+  - job: Download_artifacts
+    displayName: download and process artifacts
+    pool: k8s-hosted-agent    # using the self-hosted agent on k8s which is my laptop
+    steps:
+    - task: CmdLine@2
+      displayName: show workspace and other environment variables
+      inputs:
+        script: 'env | sort'
+    - task: CmdLine@2
+      displayName: list files
+      inputs:
+        script: 'echo $PWD ; ls -al ; echo BUILD_ARTIFACTSTAGINGDIRECTORY ; echo $BUILD_ARTIFACTSTAGINGDIRECTORY ; ls -al $BUILD_ARTIFACTSTAGINGDIRECTORY'
+    - task: DownloadPipelineArtifact@2
+      inputs:
+          source: 'current'
+          #project: # Required when source == Specific
+          #pipeline: # Required when source == Specific
+          preferTriggeringPipeline: false # Optional
+          #runVersion: 'latest' # Required when source == Specific# Options: latest, latestFromBranch, specific
+          #runBranch: 'refs/heads/master' # Required when source == Specific && RunVersion == LatestFromBranch
+          #runId: # Required when source == Specific && RunVersion == Specific
+          #tags: # Optional
+          artifact: deploy_artifacts
+          #patterns: '**' # Optional
+          path: '$(Pipeline.Workspace)'
+  - deployment: Deploy_2_k8s_ossmaster_on_mac
+    variables:
+    - name: kub-pod-instancecount
+      value: 1
+    - name: appName
+      value: pipeline-running-curl
+    - name: containerRegistry
+      value: 'docker.io/ezlee'
+    pool: k8s-hosted-agent
+    environment: 'ossmaster'
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: Kubernetes@1
+            displayName: kubectl apply
+            inputs:
+              connectionType: Kubernetes Service Connection
+              kubernetesServiceEndpoint: 'oss-master-mac'
+              containerRegistryType: Container Registry
+              dockerRegistryEndpoint: $(containerRegistry) 
+              secretType: dockerRegistry
+              secretName: 
+              kubernetesCluster: cluster.local
+              namespace: default
+              command: apply
+              arguments: -f $(Pipeline.Workspace)/deploy_artifacts/deployment/deployment.yml
