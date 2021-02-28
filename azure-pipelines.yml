@@ -111,30 +111,30 @@ stages:
           artifact: deploy_artifacts
           #patterns: '**' # Optional
           path: '$(Pipeline.Workspace)'
-  - deployment: Deploy_2_k8s_ossmaster_on_mac
-    variables:
-    - name: kub-pod-instancecount
-      value: 1
-    - name: appName
-      value: pipeline-running-curl
-    - name: containerRegistry
-      value: 'docker.io/ezlee'
-    pool: k8s-hosted-agent
-    environment: 'ossmaster'
-    strategy:
-      runOnce:
-        deploy:
-          steps:
-          - task: Kubernetes@1
-            displayName: kubectl apply
-            inputs:
-              connectionType: Kubernetes Service Connection
-              kubernetesServiceEndpoint: 'oss-master-mac'
-              containerRegistryType: Container Registry
-              dockerRegistryEndpoint: $(containerRegistry) 
-              secretType: dockerRegistry
-              secretName: 
-              kubernetesCluster: cluster.local
-              namespace: default
-              command: apply
-              arguments: -f $(Pipeline.Workspace)/deploy_artifacts/deployment/deployment.yml
+#  - deployment: Deploy_2_k8s_ossmaster_on_mac
+#    variables:
+#    - name: kub-pod-instancecount
+#      value: 1
+#    - name: appName
+#      value: pipeline-running-curl
+#    - name: containerRegistry
+#      value: 'docker.io/ezlee'
+#    pool: k8s-hosted-agent
+#    environment: 'ossmaster'
+#    strategy:
+#      runOnce:
+#        deploy:
+#          steps:
+#          - task: Kubernetes@1
+#            displayName: kubectl apply
+#            inputs:
+#              connectionType: Kubernetes Service Connection
+#              kubernetesServiceEndpoint: 'oss-master-mac'
+#              containerRegistryType: Container Registry
+#              dockerRegistryEndpoint: $(containerRegistry) 
+#              secretType: dockerRegistry
+#              secretName: 
+#              kubernetesCluster: cluster.local
+#              namespace: default
+#              command: apply
+#              arguments: -f $(Pipeline.Workspace)/deploy_artifacts/deployment/deployment.yml
