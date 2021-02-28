@@ -20,7 +20,7 @@ resources:
 variables:
   # Container registry service connection established during pipeline creation
   imageName: 'curl-ado'
-  dockerRegistryServiceConnection: 'docker.io/ezlee'
+  dockerRegistryServiceConnection: 'docker-io'
   imageRepository: 'ezlee/$(imageName)' 
   containerRegistry: 'docker.io/ezlee'
   dockerfilePath: 'Dockerfile'
