@@ -6,7 +6,7 @@ trigger:
   branches:
     include:
     #- develop    # disabling trigger for now; need to switch to schedule trigger
-    - master
+    - main 
     #- releases/*
   paths:
     exclude:
