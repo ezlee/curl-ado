@@ -1,3 +1,3 @@
-FROM node:lts-alpine3.12 
+FROM busybox:stable 
 ENTRYPOINT ["/usr/bin/curl","-v","portquiz.net"]
 CMD ["localhost"]
